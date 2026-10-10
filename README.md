@@ -2,12 +2,19 @@
 
 > **⚠️ DISCLAIMER:** This project is currently **under active development**. Features, the tool suite, and the underlying architecture are subject to continuous updates and improvements.
 
+[![Live App](https://img.shields.io/badge/Live_App-Streamlit-FF4B4B.svg)](https://appuipy-qbwm7xb4ohnzevanyvdw6d.streamlit.app/)
 [![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
 [![Google ADK 2.0](https://img.shields.io/badge/Google%20ADK-2.0-orange.svg)](https://adk.dev/)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.40+-FF4B4B.svg)](https://streamlit.io/)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg)](https://www.docker.com/)
 
 **AWTA (Agentic Wind Tunnel Analysis)** is an autonomous aerodynamic data analysis agent built with **Google Agent Development Kit (ADK) 2.0**, **Google Gemini**, and **Python**. It features an interactive **Streamlit** user interface designed for wind tunnel experimentalists, aerospace researchers, and aerodynamicists. AWTA automatically interprets natural language queries, selects specialized aerodynamic tools, performs physics-based computations (e.g., surface pressure integration, flow separation detection, aerodynamic polars, and center-of-pressure estimation), and generates publication-grade visualizations.
+
+---
+## 🌐 Live App
+You can try the AWTA agent directly in your browser without any installation:
+
+ **[Launch the AWTA Streamlit Web App](https://appuipy-qbwm7xb4ohnzevanyvdw6d.streamlit.app/)**
 
 ---
 
@@ -169,8 +176,6 @@ aero-assistant/
 │   ├── unit/                  # Unit tests for aerodynamic calculations & tools
 │   └── integration/           # End-to-end agent workflow integration tests
 ├── Dockerfile                 # Container definition for containerized deployment
-├── Docker_Instruction.txt     # Quick reference for Docker commands
-├── evaluate.py                # Autonomous LLM-as-a-Judge evaluation benchmark
 ├── pyproject.toml             # Project configuration and dependencies
 └── uv.lock                    # Dependency lockfile
 ```
