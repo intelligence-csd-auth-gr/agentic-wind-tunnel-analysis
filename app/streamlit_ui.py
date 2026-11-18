@@ -13,13 +13,13 @@ st.set_page_config(page_title="AWTA", layout="wide")
 st.title("AWTA: Agentic Wind Tunnel Analysis")
 
 st.sidebar.header("Authentication")
-user_api_key = st.sidebar.text_input("Gemini API Key:", type="password")
+user_api_key = st.sidebar.text_input("Typesafe API Key:", type="password")
 
 if not user_api_key:
-    st.info("Please provide a Gemini API Key to continue.")
+    st.info("Please provide a Typesafe API Key to continue.")
     st.stop()
 
-os.environ["GEMINI_API_KEY"]=user_api_key
+os.environ["TYPESAFE_API_KEY"]=user_api_key
 
 # Initialize session state variables for unknown fallback
 if "show_unknown_warning" not in st.session_state:
