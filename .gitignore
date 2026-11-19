@@ -207,3 +207,6 @@ tools/a2a-inspector/
 plot.png
 plot.json
 runs/
+
+# Streamlit secrets
+.streamlit/secrets.toml

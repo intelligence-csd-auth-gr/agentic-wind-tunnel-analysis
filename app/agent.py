@@ -10,6 +10,8 @@ from google.adk.agents.context import Context
 from google.adk.workflow import Workflow, node, Edge, START
 from google.adk.events import Event
 from google.genai import types
+from typesafe_sdk import TypeSafeClient, Choice
+import re
 
 # Import aerodynamic tools
 from app.app_utils.data_tools import extract_run_data, get_run_metadata
@@ -45,6 +47,7 @@ def resolve_data_file(filename: str) -> str:
 
 # Define Workflow state schema
 class AeroState(BaseModel):
+    tool_name: Optional[str] = None
     run_id: Optional[int] = None
     run_ids: Optional[List[int]] = None
     target_alpha: Optional[float] = None
@@ -118,37 +121,87 @@ async def router_node(ctx: Context, node_input: Any = None):
         return
 
     try:
-        from google.genai import Client
-        api_key = os.environ.get("GEMINI_API_KEY") or "MOCK_API_KEY"
-        client = Client(api_key=api_key)
-        response = client.models.generate_content(
-            model="gemini-flash-latest",
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema=AeroRoutingDecision,
-                temperature=0.0,
-                system_instruction=(
-                    "You are the intent classifier and entity extractor for the Ohio Aerodynamic Agent.\n"
-                    "Analyze the user's prompt and select the most appropriate tool to call.\n"
-                    "If the user wants to:\n"
-                    "- Extract, get, show, summary, statistics, or view data for a run: select 'extract_run_data'.\n"
-                    "- Get header information, test conditions, or metadata about a specific run: select 'get_run_metadata'.\n"
-                    "- Plot, show, visualize Cl/Cdp/Cm over time or time trend for a run: select 'plot_time_trend'.\n"
-                    "- Compare multiple runs (AOA vs Cl/Cdp/Cm): select 'plot_runs_comparison'.\n"
-                    "- Plot pressure distribution (Cp vs x/c) for one or more runs at a target alpha/AOA: select 'plot_pressure_distribution'.\n"
-                    "- Compare integrated vs reported values: select 'compare_integrated_vs_reported'.\n"
-                    "- Calculate, plot, or visualize the center of pressure: select 'plot_center_of_pressure'.\n"
-                    "- Calculate, plot, or visualize aerodynamic efficiency: select 'plot_aerodynamic_efficiency'.\n"
-                    "- Plot, visualize, or show pressure distribution / Cp evolution over a specific time window for run(s): select 'plot_pressure_time_window'.\n"
-                    "- If the user prompt does not match any of these tools: select 'unknown'.\n"
-                    "Ensure you extract all required fields: run_id (single integer), run_ids (list of integers), target_alpha (float), target_alphas (list of floats), time_start (float), time_end (float), output_filename (string) if specified, and data_files (list of strings representing dataset filenames)."
-                )
-            )
+        api_key = os.environ.get("TYPESAFE_API_KEY") or "MOCK_API_KEY"
+        client = TypeSafeClient(api_key=api_key)
+        
+        tool_choice= Choice(
+            instructions="Select the most appropriate aerodynamic tool based on the user's request.",
+            criteria={
+                "extract_run_data": "Extract, get, show, summary, statistics, or view data for a run.",
+                "get_run_metadata": "Get header information, test conditions, or metadata about a run.",
+                "plot_time_trend": "Plot, show, visualize Cl/Cdp/Cm over time or time trend.",
+                "plot_runs_comparison": "Compare multiple runs (AOA vs Cl/Cdp/Cm).",
+                "plot_pressure_distribution": "Plot pressure distribution (Cp vs x/c) for runs.",
+                "compare_integrated_vs_reported": "Compare integrated vs reported values.",
+                "plot_center_of_pressure": "Calculate, plot, or visualize the center of pressure.",
+                "plot_aerodynamic_efficiency": "Calculate, plot, or visualize aerodynamic efficiency.",
+                "plot_pressure_time_window": "Plot pressure distribution over a specific time window.",
+                "unknown": "If the user prompt does not match any of these tools."
+            }
         )
-        import json
-        decision_data = json.loads(response.text)
-        decision = AeroRoutingDecision(**decision_data)
+        
+        # Candidate generation for all numerical values in the prompt
+        
+        
+        candidates = list(set(re.findall(r"[-+]?\d*\.\d+|\d+", prompt)))
+        
+        questions = {"tool": tool_choice}
+        
+        # Create Yes/No Choice for each number
+        for num in candidates:
+            questions[f"is_run_{num}"] = Choice(
+                instructions=f"Does the number {num} represent a Run ID (RunNo) in the user's prompt?",
+                criteria={"yes": "Yes, it is a Run ID", "no": "No, it is not"}
+            )
+            questions[f"is_alpha_{num}"] = Choice(
+                instructions=f"Does the number {num} represent an Angle of Attack (Alpha/AOA/deg) in the user's prompt?",
+                criteria={"yes": "Yes, it is an Angle of Attack", "no": "No, it is not"}
+            )
+            questions[f"is_tstart_{num}"] = Choice(
+                instructions=f"Does the number {num} represent the start time in seconds?",
+                criteria={"yes": "Yes", "no": "No"}
+            )
+            questions[f"is_tend_{num}"] = Choice(
+                instructions=f"Does the number {num} represent the end time in seconds?",
+                criteria={"yes": "Yes", "no": "No"}
+            )
+
+        response = client.system_one(state=prompt, questions=questions)
+
+        ans_tool = response.answers["tool"].choice
+        
+        ans_run_ids = []
+        ans_alphas = []
+        ans_time_start = None
+        ans_time_end = None
+
+        # Check model answers
+        for num in candidates:
+            if response.answers[f"is_run_{num}"].choice == "yes":
+                ans_run_ids.append(int(float(num)))
+            if response.answers[f"is_alpha_{num}"].choice == "yes":
+                ans_alphas.append(float(num))
+            if response.answers[f"is_tstart_{num}"].choice == "yes":
+                ans_time_start = float(num)
+            if response.answers[f"is_tend_{num}"].choice == "yes":
+                ans_time_end = float(num)
+
+        # Sorting for correct order in plots
+        ans_run_ids.sort()
+        ans_alphas.sort()
+
+        decision = AeroRoutingDecision(
+            tool_name=ans_tool,
+            run_id=ans_run_ids[0] if ans_run_ids else None,
+            run_ids=ans_run_ids if ans_run_ids else None,
+            target_alpha=ans_alphas[0] if ans_alphas else None,
+            target_alphas=ans_alphas if ans_alphas else None,
+            time_start=ans_time_start,
+            time_end=ans_time_end
+        )
+
+        
+
     except Exception as e:
         res = f"Error during intent classification: {e}"
         ctx.output = res
@@ -156,14 +209,15 @@ async def router_node(ctx: Context, node_input: Any = None):
         return
 
     # Update state variables (using dict-like bracket notation on State object)
+    ctx.state["tool_name"] = decision.tool_name
     ctx.state["run_id"] = decision.run_id
     ctx.state["run_ids"] = decision.run_ids
     ctx.state["target_alpha"] = decision.target_alpha
     ctx.state["target_alphas"] = decision.target_alphas
     ctx.state["time_start"] = decision.time_start
     ctx.state["time_end"] = decision.time_end
-    ctx.state["output_filename"] = decision.output_filename
-    ctx.state["data_files"] = decision.data_files
+
+    print(f"SELECTED_TOOL: {decision.tool_name}",flush=True)
 
     # Align run_id and run_ids if necessary
     if decision.tool_name in ("plot_runs_comparison", "plot_pressure_distribution", "plot_pressure_time_window"):
