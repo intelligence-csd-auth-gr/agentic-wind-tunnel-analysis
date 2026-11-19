@@ -7,14 +7,17 @@
 [![Google ADK 2.0](https://img.shields.io/badge/Google%20ADK-2.0-orange.svg)](https://adk.dev/)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.40+-FF4B4B.svg)](https://streamlit.io/)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg)](https://www.docker.com/)
+[![Supabase](https://img.shields.io/badge/Supabase-Auth%20%26%20DB-3ECF8E.svg)](https://supabase.com/)
 
-**AWTA (Agentic Wind Tunnel Analysis)** is an autonomous aerodynamic data analysis agent built with **Google Agent Development Kit (ADK) 2.0**, **Google Gemini**, and **Python**. It features an interactive **Streamlit** user interface designed for wind tunnel experimentalists, aerospace researchers, and aerodynamicists. AWTA automatically interprets natural language queries, selects specialized aerodynamic tools, performs physics-based computations (e.g., surface pressure integration, flow separation detection, aerodynamic polars, and center-of-pressure estimation), and generates publication-grade visualizations.
+**AWTA (Agentic Wind Tunnel Analysis)** is an autonomous aerodynamic data analysis agent built with **Google Agent Development Kit (ADK) 2.0**, **TypeSafe System One**, and **Python**. It features an interactive **Streamlit** user interface designed for wind tunnel experimentalists, aerospace researchers, and aerodynamicists. AWTA automatically interprets natural language queries, selects specialized aerodynamic tools, performs physics-based computations (e.g., surface pressure integration, flow separation detection, aerodynamic polars, and center-of-pressure estimation), and generates publication-grade visualizations.
 
 ---
 ## 🌐 Live App
 You can try the AWTA agent directly in your browser without any installation:
 
  **[Launch the AWTA Streamlit Web App](https://appuipy-qbwm7xb4ohnzevanyvdw6d.streamlit.app/)**
+
+On the landing page you can **log in**, **register**, or **continue as a guest**. Guests can use every analysis feature, but their query history is not saved.
 
 ---
 
@@ -23,7 +26,7 @@ You can try the AWTA agent directly in your browser without any installation:
 ### Prerequisites
 
 - [Docker](https://www.docker.com/) (Recommended) **OR** [Python 3.13+](https://www.python.org/) with [`uv`](https://docs.astral.sh/uv/)
-- A **Gemini API Key** from [Google AI Studio](https://aistudio.google.com/) (entered directly inside the Streamlit Web UI)
+- A **TypeSafe API Key (`TYPESAFE_API_KEY`)** from the [TypeSafe Console](https://console.typesafe.ai/login?returnTo=%2Fkeys) (entered directly inside the Streamlit Web UI)
 
 
 ---
@@ -66,7 +69,7 @@ docker run -p 8501:8501 `
 docker run -p 8501:8501 -v "%cd%/data:/app/data" awta
 ```
 
-Once running, access the web dashboard at: **`http://localhost:8501`** and input your **Gemini API Key** directly in the sidebar authentication field.
+Once running, access the web dashboard at: **`http://localhost:8501`** and input your **TypeSafe API Key** directly in the sidebar authentication field.
 
 ---
 
@@ -113,9 +116,10 @@ AWTA integrates specialized physics and data-analysis tools exposed to the agent
 
 ```mermaid
 flowchart TD
-    User([User / Aerodynamicist]) -->|Natural Language Query| UI[Streamlit Web UI / Dashboard]
-    UI -->|Query + Selected Dataset| Router[ADK 2.0 Router Node / Gemini Model]
-    
+    User([User / Aerodynamicist]) -->|Login / Register / Guest| Auth[Supabase Auth]
+    User -->|Natural Language Query| UI[Streamlit Web UI / Dashboard]
+    UI -->|Query + Selected Dataset| Router[ADK 2.0 Router Node / Typesafe Model]
+
     subgraph Agentic Brain
         Router -->|Structured JSON Routing| Decision{AeroRoutingDecision}
         Decision -->|Extract Parameters: run_id, alpha, dataset| Tools
@@ -133,12 +137,19 @@ flowchart TD
     T1 & T2 & T3 & T4 & T5 & T6 --> PlotEngine[Plotly Engine & Metrics Analyzer]
     PlotEngine -->|Interactive JSON Plot + Physics Summary| UI
     UI -->|Render Visualizations & Summary| User
+
+    Router -.->|SELECTED_TOOL marker on stdout| UI
+    UI -.->|Log query + selected tool, logged-in users only| DB[(Supabase Postgres + RLS)]
+    DB -.->|Query history| UI
 ```
 
-1. **User Interaction**: Users select target wind tunnel run files and enter natural language instructions via the Streamlit interface.
-2. **Intent Parsing & Parameter Extraction**: The Google ADK 2.0 ReAct agent utilizes Gemini to parse complex queries, extract target angles of attack, run numbers, and determine the optimal aerodynamic tool.
-3. **Physics Computation & Visualization**: Specialized modules compute aerodynamic coefficients, perform numerical integration over pressure taps, and generate publication-quality figures.
-4. **Interactive Dashboard Feedback**: Figures, data previews, and physical interpretations are rendered live in Streamlit.
+1. **Authentication**: Users log in or register through Supabase Auth, or continue as guests. Each browser session has its own Supabase client.
+2. **User Interaction**: Users select target wind tunnel run files and enter natural language instructions via the Streamlit interface, or pick an example from the Help window.
+3. **Intent Parsing & Parameter Extraction**: The Google ADK 2.0 agent parses the query, extracts target angles of attack, run numbers and time windows, and determines the optimal aerodynamic tool.
+4. **Physics Computation & Visualization**: Specialized modules compute aerodynamic coefficients, perform numerical integration over pressure taps, and generate publication-quality figures.
+5. **Interactive Dashboard Feedback**: Figures, data previews, and physical interpretations are rendered live in Streamlit.
+6. **Logging & History**: The router prints a `SELECTED_TOOL: <tool_name>` line to stdout. The Streamlit app reads it from the agent subprocess output and stores it with the query in the `queries` table (logged-in users only). The same table feeds the History menu.
+
 
 ---
 
@@ -172,9 +183,6 @@ aero-assistant/
 ├── data/
 │   ├── merged_data_L303.csv   # Wind tunnel experimental test matrix
 │   └── xc_locations.csv       # Airfoil pressure tap coordinates (x/c)
-├── tests/
-│   ├── unit/                  # Unit tests for aerodynamic calculations & tools
-│   └── integration/           # End-to-end agent workflow integration tests
 ├── Dockerfile                 # Container definition for containerized deployment
 ├── pyproject.toml             # Project configuration and dependencies
 └── uv.lock                    # Dependency lockfile
@@ -185,9 +193,17 @@ aero-assistant/
 ## 🛠️ Technology Stack
 
 - **Agent Framework**: [Google Agent Development Kit (ADK) 2.0](https://adk.dev/)
-- **Foundation Models**: Google Gemini (`gemini-2.5-flash`)
+- **Intent Classification & Parameter Extraction**: [TypeSafe](https://console.typesafe.ai/) model (router node)
 - **Frontend / UI**: [Streamlit](https://streamlit.io/)
+- **Authentication & Database**: [Supabase](https://supabase.com/) (Auth, Postgres, Row-Level Security)
 - **Data & Scientific Computing**: `pandas`, `numpy`, `scipy`
 - **Visualization**: `plotly`
 - **Package & Environment Management**: [`uv`](https://docs.astral.sh/uv/)
 - **Containerization**: [Docker](https://www.docker.com/)
+
+## 🔐 Privacy & Security Notes
+
+- Passwords are managed by Supabase Auth. The app never stores or hashes them itself.
+- Row-Level Security ensures each user can read and write only their own profile and queries.
+- For logged-in users, the **text of each query** and the **selected tool** are stored to provide history and to help improve the agent. Guests are never logged.
+- The TypeSafe API key is kept only in the user's session and passed to the agent subprocess. It is not written to the database.
